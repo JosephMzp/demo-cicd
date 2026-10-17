@@ -1,0 +1,7 @@
+# Vulnerabilidades aceptadas, con el porqué. Cada línea es una decisión documentada, no un atajo.
+#
+# CVE-2025-68121: crypto/tls en el binario gosu que trae la imagen oficial de Postgres (postgres:16-alpine).
+# gosu solo se usa al arrancar el contenedor, para pasar de root al usuario postgres. No abre conexiones TLS,
+# así que la falla (validación de certificados al reanudar sesiones TLS) no es explotable en este uso.
+# Se vuelve a revisar cuando la imagen oficial actualice gosu. Aceptada el 09/10/2026.
+CVE-2025-68121

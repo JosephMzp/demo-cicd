@@ -1,0 +1,31 @@
+{
+  "uid": "libro-de-visitas",
+  "title": "Libro de visitas: métricas RED",
+  "tags": ["demo-cicd"],
+  "timezone": "browser",
+  "refresh": "10s",
+  "time": { "from": "now-15m", "to": "now" },
+  "schemaVersion": 39,
+  "panels": [
+    {
+      "id": 1, "type": "timeseries", "title": "Rate: peticiones por segundo",
+      "gridPos": { "x": 0, "y": 0, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "sum by (route) (rate(http_request_duration_seconds_count[1m]))", "legendFormat": "{{route}}" }]
+    },
+    {
+      "id": 2, "type": "timeseries", "title": "Errors: porcentaje de respuestas 5xx",
+      "gridPos": { "x": 8, "y": 0, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "percent" }, "overrides": [] },
+      "targets": [{ "refId": "A", "expr": "100 * sum(rate(http_request_duration_seconds_count{status=~\"5..\"}[1m])) / sum(rate(http_request_duration_seconds_count[1m]))", "legendFormat": "5xx" }]
+    },
+    {
+      "id": 3, "type": "timeseries", "title": "Duration: latencia p95",
+      "gridPos": { "x": 16, "y": 0, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [{ "refId": "A", "expr": "histogram_quantile(0.95, sum by (le, route) (rate(http_request_duration_seconds_bucket[5m])))", "legendFormat": "{{route}}" }]
+    }
+  ]
+}

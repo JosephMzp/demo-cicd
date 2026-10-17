@@ -1,0 +1,11 @@
+# DEV: un ambiente efímero que el pipeline levanta en cada push a main.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: demo-dev
+resources:
+  - ../../base
+labels:
+  - pairs:
+      ambiente: dev
+    includeSelectors: false

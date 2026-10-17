@@ -1,0 +1,4 @@
+# Reglas de Hadolint para los tres Dockerfiles.
+# Si ignoras una regla, deja escrito aquí por qué. Nada de continue-on-error en el pipeline.
+failure-threshold: warning
+ignored: []

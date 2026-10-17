@@ -1,0 +1,11 @@
+# Configuración que NO es secreta. La contraseña va en el Secret "db-credenciales",
+# que se crea en el clúster, nunca en el repositorio.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  DB_HOST: db
+  DB_PORT: "5432"
+  DB_NAME: libro
+  DB_USER: app

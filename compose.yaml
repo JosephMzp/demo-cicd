@@ -1,0 +1,78 @@
+# La aplicación completa en tu máquina: docker compose up -d --build --wait
+# Con observabilidad (Prometheus + Grafana): docker compose --profile observabilidad up -d --build --wait
+name: demo-cicd
+
+services:
+  web:
+    build: ./web
+    image: demo-cicd-web:local
+    ports:
+      - "8080:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [frontend]
+
+  api:
+    build: ./api
+    image: demo-cicd-api:local
+    environment:
+      DB_HOST: db
+      DB_NAME: libro
+      DB_USER: app
+      DB_PASSWORD: ${DB_PASSWORD:?Define DB_PASSWORD en tu .env}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [frontend, backend]
+
+  db:
+    build: ./db
+    image: demo-cicd-db:local
+    environment:
+      POSTGRES_DB: libro
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Define DB_PASSWORD en tu .env}
+    volumes:
+      - datos:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d libro"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [backend]
+
+  # Observabilidad: solo arranca con --profile observabilidad
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    profiles: [observabilidad]
+    volumes:
+      - ./observabilidad/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    networks: [frontend]
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    profiles: [observabilidad]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+    volumes:
+      - ./observabilidad/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3001:3000"
+    depends_on: [prometheus]
+    networks: [frontend]
+
+networks:
+  frontend:
+  backend:
+
+volumes:
+  datos:
