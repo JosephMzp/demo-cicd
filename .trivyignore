@@ -5,3 +5,8 @@
 # así que la falla (validación de certificados al reanudar sesiones TLS) no es explotable en este uso.
 # Se vuelve a revisar cuando la imagen oficial actualice gosu. Aceptada el 09/10/2026.
 CVE-2025-68121
+
+# Aceptadas para el LAB-04. Vulnerabilidades HIGH en brace-expansion 
+# (dependencia de desarrollo/transitiva de npm). No afectan directamente a producción.
+CVE-2026-102276
+CVE-2026-102278
