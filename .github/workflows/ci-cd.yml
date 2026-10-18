@@ -152,7 +152,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: read
+      packages: read 
     strategy:
       matrix:
         servicio: [web, api, db]
