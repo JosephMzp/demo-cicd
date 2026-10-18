@@ -1,112 +1,103 @@
-# demo-cicd: la aplicación base del LAB-04
+# demo-cicd: Pipeline CI/CD End-to-End (LAB-04)
 
-Curso IF-1116, Tópicos de Tecnologías de Información, semestre 2026-II. Semana 06.
+[![CI/CD](https://github.com/JosephMzp/demo-cicd/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/JosephMzp/demo-cicd/actions/workflows/ci-cd.yml)
 
-Aquí les dejo una aplicación completa y funcionando: el libro de visitas del LAB-02, ya contenerizado, con pruebas, con manifiestos de Kubernetes y con métricas. Lo que **no** tiene es el pipeline. Eso lo construyen ustedes siguiendo la [guía práctica de la Semana 06](https://github.com/urp-topicos-2026-2/.github-private/blob/main/semanas/S06/guia-pipeline.md), y lo extienden en el [LAB-04](https://github.com/urp-topicos-2026-2/.github-private/blob/main/semanas/S06/laboratorio/lab-04.md).
+**Curso:** IF-1116 Topicos de Tecnologias de Informacion (2026-II)
+**Estudiante:** Joseph Miguel Zavaleta Polo
 
-Todo lo que está aquí lo probé y funciona: lint, pruebas unitarias, pruebas de integración, Compose y los manifiestos. Si algo se pone en rojo en su pipeline, el problema está en el pipeline, y eso es justamente lo que tienen que resolver.
+Aplicacion de tres servicios (**web** en Nginx, **api** en Node.js/Express y **db** en PostgreSQL) con un pipeline CI/CD completo en GitHub Actions que ejecuta analisis estatico, deteccion de secretos, pruebas unitarias y de integracion, construccion y publicacion de imagenes inmutables en GHCR, escaneo de vulnerabilidades con doble motor, despliegue a un entorno DEV efimero (`kind`) y promocion con aprobacion manual a un entorno STAGING persistente en Kubernetes local (Rancher Desktop).
 
-## Cómo usarlo
+---
 
-No hagan fork. Este repositorio es una **plantilla**: arriba a la derecha, **Use this template → Create a new repository**. Pónganle el nombre `demo-cicd`, en **su** cuenta y **público**. Público porque GitHub Actions y GitHub Packages son gratis sin límite para repositorios públicos, y porque el pipeline es la evidencia que yo reviso.
+## Arquitectura del Pipeline (Criterio B5)
 
-## Qué hay aquí
-
-```
-web/                    nginx: sirve la página y reenvía /api/ al backend
-    Dockerfile          imagen sin root (nginx-unprivileged), escucha en 8080
-    nginx.conf
-    public/             index.html, estilos.css, libro-de-visitas.js
-api/                    la API en Node.js (Express), con métricas para Prometheus en /metrics
-    Dockerfile
-    app.js              la aplicación, separada del arranque para poder probarla sin base de datos
-    server.js           el arranque: pool de Postgres, puerto, señales
-db/                     Postgres con las tablas ya incluidas
-tests/
-    unit/               pruebas unitarias de la API, con un pool falso (Vitest + Supertest)
-    site/               pruebas del sitio estático (Vitest + jsdom)
-    integration/        pruebas contra la aplicación completa, entrando por web (fetch)
-scripts/
-    smoke.sh            cinco comprobaciones rápidas contra un ambiente desplegado
-    desplegar.sh        kubectl kustomize + reemplazo de imágenes + kubectl apply
-k8s/
-    base/               Deployments, Services, ConfigMap y PVC
-    overlays/dev/       namespace demo-dev
-    overlays/staging/   namespace demo-staging, web por NodePort 30080, dos réplicas de api
-observabilidad/         Prometheus y Grafana con un dashboard RED ya armado
-compose.yaml            la aplicación en su máquina, con perfil opcional de observabilidad
-.devcontainer/          para que todo arranque solo en GitHub Codespaces
+```mermaid
+flowchart LR
+    L["1. lint <br/> ESLint + HTMLHint + Hadolint"] --> P["5. package <br/> Build & Push GHCR (sha)"]
+    S["2. sast <br/> Semgrep + TruffleHog (B2)"] --> P
+    TU["3. test-unit <br/> Vitest + Supertest + jsdom"] --> TI["4. test-integration <br/> Docker Compose + fetch"] --> P
+    P --> SEC["6. security <br/> Trivy (CRITICAL,HIGH) + Grype (B2)"] --> DEV["7. deploy-dev <br/> Cluster efimero kind + Smoke"] --> AP{"Aprobacion <br/> Manual"} --> STG["8. deploy-staging <br/> Self-hosted Runner + K8s"]
+    style L fill:#4ba3c7,stroke:#4ba3c7,color:#fff
+    style S fill:#d9635f,stroke:#d9635f,color:#fff
+    style TU fill:#4ba3c7,stroke:#4ba3c7,color:#fff
+    style TI fill:#4ba3c7,stroke:#4ba3c7,color:#fff
+    style P fill:#e8a23b,stroke:#e8a23b,color:#fff
+    style SEC fill:#d9635f,stroke:#d9635f,color:#fff
+    style DEV fill:#3b7d45,stroke:#3b7d45,color:#fff
+    style AP fill:#fff3cd,stroke:#b58105,color:#5c4300
+    style STG fill:#1f2024,stroke:#1f2024,color:#fff
 ```
 
-## Correrlo en su máquina
+| # | Etapa / Job | Herramientas (Version fija) | Que revisa / Que hace | Que pasa si falla | En que evento corre |
+|---|---|---|---|---|---|
+| 1 | lint | ESLint 9.x, HTMLHint 1.x, Hadolint v3.5.0 | Sintaxis y estilo en JS, buenas practicas de HTML y reglas de seguridad/optimizacion en los 3 Dockerfile. | El job termina con codigo != 0 y bloquea package y el merge del PR. | pull_request, push (main), workflow_dispatch |
+| 2 | sast | Semgrep 1.180.0, TruffleHog 3.88.12 (B2) | Patrones de codigo inseguro (p/ci, p/dockerfile) y busqueda de secretos/credenciales en todo el historial de Git. | Falla inmediatamente (--error / --fail) y bloquea el empaquetado. | pull_request, push (main), workflow_dispatch |
+| 3 | test-unit | Vitest 2.1.8, Supertest 7.0.0, jsdom 25.0.1 | 10 pruebas unitarias de la API (incluyendo /api/estadisticas) con pool simulado y 6 pruebas del DOM estatico. | Se detiene la cadena de pruebas (test-integration no arranca). | pull_request, push (main), workflow_dispatch |
+| 4 | test-integration | Docker Compose + Vitest (fetch) | Levanta web, api y db reales con healthchecks y ejecuta 7 pruebas de integracion de punta a punta a traves de Nginx. | Imprime los logs de los contenedores (if: failure()), apaga el entorno y bloquea package. | pull_request, push (main), workflow_dispatch |
+| 5 | package | Docker Buildx + GHCR (metadata-action, build-push-action) | Construye las imagenes de web, api y db en paralelo (matrix) y las publica en GHCR con tag inmutable sha-<commit>. | No se ejecuta el escaneo de seguridad ni los despliegues. | pull_request, push (main), workflow_dispatch |
+| 6 | security | Trivy v0.36.0 + Anchore Grype v0.87.0 (B2) | Escanea las 3 imagenes publicadas buscando CVEs CRITICAL y HIGH con parche disponible. | Falla con exit-code: 1 e impide que una imagen vulnerable llegue a deploy-dev. | pull_request, push (main), workflow_dispatch |
+| 7 | deploy-dev | kind v1.15.1 + kubectl + smoke.sh | Crea un cluster Kubernetes efimero en el runner, despliega el overlay dev, verifica rollout status y corre smoke + integracion. | Ejecuta diagnostico del cluster y bloquea la promocion a staging. | Solo en push a main y workflow_dispatch (nunca en PR) |
+| 8 | deploy-staging | Runner self-hosted + Rancher Desktop + smoke.sh | Espera aprobacion humana en el environment staging, promueve la misma imagen (sha-<commit>) al cluster local y ejecuta smoke test. | El rollout falla por timeout o smoke test y la version anterior se mantiene o reporta error. | Solo en push a main tras aprobacion manual |
 
-```bash
-cp .env.example .env          # y cambien la contraseña
-docker compose up -d --build --wait
-open http://localhost:8080    # en Windows: start http://localhost:8080
-```
+---
 
-Con observabilidad:
+## Pruebas de Fallo por Etapa (Criterio B3)
 
-```bash
-docker compose --profile observabilidad up -d --build --wait
-open http://localhost:9090    # Prometheus
-open http://localhost:3001    # Grafana, usuario admin, contraseña admin
-```
+| Etapa rota | Que se rompio a proposito | Enlace al Run en Rojo | Enlace al Run en Verde | Minuto de deteccion |
+|---|---|---|---|---|
+| 1. lint | Se cambio `FROM node:22-alpine` por `FROM node:latest` en api/Dockerfile (violacion de regla Hadolint DL3007). | [Ver Run en Rojo](https://github.com/JosephMzp/demo-cicd/actions/runs/39094589295/job/117578274027?pr=10) | [Ver Run en Verde](https://github.com/JosephMzp/demo-cicd/actions/runs/39095176558) | ~0m 25s (Minuto 1) |
+| 2. sast | Se elimino la clave `cooldown` en .github/dependabot.yml (detectado por Semgrep dependabot-missing-cooldown). | [Ver Run en Rojo](https://github.com/JosephMzp/demo-cicd/actions/runs/39095662594/job/117581453469?pr=11) | [Ver Run en Verde](https://github.com/JosephMzp/demo-cicd/actions/runs/39095731747?pr=11) | ~0m 40s (Minuto 1) |
+| 3. test-unit | En api/app.js, se cambio el codigo de respuesta 400 por 200 cuando falta el nombre en `POST /api/mensajes`. | [Ver Run en Rojo](https://github.com/JosephMzp/demo-cicd/actions/runs/39096287494/job/117583363702?pr=12) | [Ver Run en Verde](https://github.com/JosephMzp/demo-cicd/actions/runs/39096341840?pr=12) | ~0m 30s (Minuto 1) |
+| 4. test-integration | En web/nginx.conf, se cambio `proxy_pass http://api:3000;` por `http://api:3001;` (unitarias pasan, integracion falla). | [Ver Run en Rojo](https://github.com/JosephMzp/demo-cicd/actions/runs/39096588892/job/117584315801?pr=13) | [Ver Run en Verde](https://github.com/JosephMzp/demo-cicd/actions/runs/39096721372?pr=13) | ~1m 20s (Minuto 2) |
 
-## Las pruebas, una por una
+---
 
-```bash
-npm ci && npm ci --prefix api   # una sola vez
+## Optimizacion de Velocidad del Pipeline (Criterio B6)
 
-npm run lint                    # ESLint sobre el JavaScript, HTMLHint sobre el HTML
-npm run test:unit               # 9 pruebas, sin base de datos, en menos de un segundo
-npm run test:site               # 6 pruebas sobre web/public
-npm run test:integration        # 6 pruebas contra http://localhost:8080 (la app tiene que estar levantada)
-APP_URL=http://localhost:30080 npm run test:integration   # las mismas, contra otro ambiente
-bash scripts/smoke.sh http://localhost:8080
-```
+Se midio el tiempo del primer run completo en verde (Antes) frente al pipeline optimizado (Despues), sin contar el tiempo de espera humana en la compuerta de aprobacion de STAGING.
 
-Los `Dockerfile` se revisan con [Hadolint](https://github.com/hadolint/hadolint):
+**Mejoras aplicadas:**
 
-```bash
-docker run --rm -i hadolint/hadolint < api/Dockerfile
-```
+- **Paralelizacion del grafo de dependencias (`needs`):** `test-unit` dejo de depender secuencialmente de `lint` para arrancar en paralelo junto con `lint` y `sast` desde el segundo cero, manteniendo la compuerta completa en `package` (`needs: [lint, test-integration, sast]`).
 
-## La API
+- **Eliminacion de emulacion multi-arquitectura innecesaria (QEMU arm64):** Dado que tanto los runners de GitHub (`ubuntu-latest`) como el cluster local de STAGING corren sobre `linux/amd64`, se elimino la compilacion cruzada por emulacion QEMU a `linux/arm64` y se aprovecho la cache de capas de GitHub Actions (`type=gha,mode=max`).
 
-| Método y ruta | Qué hace | Respuesta |
-|---|---|---|
-| `GET /api/health` | Dice si el servicio está sano | `200` con `{"status":"ok"}`, o `503` si no puede hablar con la base de datos |
-| `GET /api/mensajes` | Lista los mensajes, el más reciente primero | `200` con un arreglo JSON |
-| `POST /api/mensajes` | Crea un mensaje. Recibe `{"nombre":"...","mensaje":"..."}` | `201` con el mensaje creado, o `400` si falta un campo o el mensaje pasa de 280 caracteres |
-| `GET /metrics` | Métricas en formato Prometheus | Solo dentro de la red. nginx devuelve `404` si alguien la pide desde afuera |
+| Job / Etapa | Tiempo Antes (1.er Run) | Tiempo Despues (Optimizado) | Mejora / Cambio |
+|---|---|---|---|
+| 1. Lint | 27s | 14s | Cache de npm activa |
+| 2. SAST y Secretos | 26s | 35s | Ejecucion en paralelo |
+| 3. Pruebas unitarias | 11s | 12s (corre desde t=0s) | -28s en ruta critica |
+| 4. Pruebas de integracion | 32s | 35s | Arranca 28s antes |
+| 5. Empaquetar y publicar | 2m 48s | 1m 10s | Sin emulacion QEMU arm64 + cache GHA |
+| 6. Escaneo de imagen | 1m 9s | 1m 6s | Incluye doble escaner (Trivy + Grype) |
+| 7. Deploy DEV (efimero) | 1m 29s | 1m 25s | Imagenes mas ligeras y cache de npm |
+| 8. Deploy STAGING | 14s | 15s | Imagenes pre-descargadas en nodo local |
+| Tiempo Total de Ruta Crítica (sin espera manual) | ~7m 26s (446s) | ~5m 32s (332s) | Reducción del 25.6% (Cumple con el > 25% requerido) |
 
-Toda la configuración entra por variables de entorno: `PORT`, `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER` y `DB_PASSWORD`. En el código no hay ninguna contraseña, y así debe seguir.
+---
 
-## Kubernetes
+## Bitacora de Decisiones
 
-Los manifiestos usan imágenes `demo-cicd-web:local`, `demo-cicd-api:local` y `demo-cicd-db:local`. El script `scripts/desplegar.sh` las cambia por las de su registro antes de aplicar:
+### B2: Cambio de dos herramientas del menu (Secretos y Escaneo de Imagenes)
 
-```bash
-kubectl create namespace demo-staging
-kubectl -n demo-staging create secret generic db-credenciales --from-literal=DB_PASSWORD="$(openssl rand -hex 16)"
-scripts/desplegar.sh k8s/overlays/staging ghcr.io/<usuario>/demo-cicd sha-<commit>
-kubectl -n demo-staging rollout status deploy/web deploy/api deploy/db
-open http://localhost:30080
-```
+**Decision:** Reemplazar Gitleaks por TruffleHog (`trufflesecurity/trufflehog:3.88.12`) en la etapa de deteccion de secretos (`sast`) e incorporar Anchore Grype (`anchore/grype:v0.87.0`) en la etapa de seguridad de imagenes (`security`).
 
-El Secret `db-credenciales` se crea **en el clúster**, una sola vez. No está en el repositorio ni lo crea el pipeline de staging. Los pods llevan `imagePullSecrets: ghcr`: si sus paquetes son públicos, ese Secret no hace falta y Kubernetes lo ignora; si son privados, créenlo con un token que tenga `read:packages`.
+**Alternativas que evalue:**
 
-## Lo que no está aquí, a propósito
+- **En deteccion de secretos:** TruffleHog vs. detect-secrets (de Yelp). `detect-secrets` requiere generar y mantener un archivo `.secrets.baseline` en el repositorio, mientras que TruffleHog escanea directamente el historial de commits de Git (`git file:///repo`) en contenedor y clasifica secretos verificados y desconocidos con salida de error (`--fail`).
 
-- `.github/workflows/`: el pipeline. Es el trabajo de la guía y del laboratorio
-- `.github/dependabot.yml`
-- Los ambientes de GitHub (`dev`, `staging`) y la protección de `main`
-- La configuración de los runners, de GitLab CI, de Argo CD y de todo lo que piden los retos
+- **En escaneo de contenedores:** Anchore Grype vs. Docker Scout / Snyk. Snyk y Docker Scout requieren cuentas SaaS externas y tokens adicionales en Secrets, mientras que Grype es 100% open source, se ejecuta como contenedor con version fija (`v0.87.0`), soporta autenticacion directa contra `ghcr.io` con `GITHUB_TOKEN` y permite gestionar exclusiones documentadas en `.grype.yaml`.
 
-## Dudas
+**Por que elegi estas:** Ambas herramientas corren en contenedor oficial con version fija inmutable, no requieren credenciales de terceros fuera de GitHub y frenan el pipeline (`--fail` y `--fail-on critical`) ante cualquier hallazgo.
 
-En el [issue de entrega del LAB-04](https://github.com/urp-topicos-2026-2/.github-private/issues). Cuando pregunten, pasen el enlace al run que falló, digan en qué job y en qué paso, qué esperaban y qué pasó.
+**Fuentes consultadas:**
 
-Ing. Ronald Requena Crispín
+- TruffleHog Documentation - CI/CD GitHub Actions
+- Anchore Grype Documentation - Configuration & Ignore Rules
+
+**Como lo verifique:**
+
+- Run en rojo (bloqueo intencional con las herramientas nuevas): [Ver Run en Rojo B2](https://github.com/JosephMzp/demo-cicd/actions/runs/39146440770/job/117731459805?pr=14)
+- Run en verde (con configuracion final y .grype.yaml): [Ver Run en Verde B2](https://github.com/JosephMzp/demo-cicd/actions/runs/39149814627?pr=14)
+
+**Que no me funciono:** Al activar Grype inicialmente junto a Trivy, Grype bloqueo la imagen `demo-cicd-db` por la vulnerabilidad `CVE-2025-68121` del binario `gosu`, debido a que Grype no lee el archivo `.trivyignore`. Aprendi que cada escaner gestiona su propia politica de riesgos y lo solucione creando `.grype.yaml` con la regla `ignore` documentada y montandolo en el contenedor con `-c /.grype.yaml`.
