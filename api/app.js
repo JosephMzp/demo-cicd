@@ -48,7 +48,7 @@ export function crearApp({ pool, registro = new client.Registry() }) {
     const nombre = String(req.body?.nombre ?? "").trim();
     const mensaje = String(req.body?.mensaje ?? "").trim();
 
-    if (!nombre || !mensaje) return res.status(200).json({ error: "Faltan el nombre o el mensaje." });
+    if (!nombre || !mensaje) return res.status(400).json({ error: "Faltan el nombre o el mensaje." });
     if (nombre.length > 60) return res.status(400).json({ error: "El nombre no puede pasar de 60 caracteres." });
     if (mensaje.length > 280) return res.status(400).json({ error: "El mensaje no puede pasar de 280 caracteres." });
 
