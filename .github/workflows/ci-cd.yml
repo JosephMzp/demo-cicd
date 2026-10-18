@@ -180,7 +180,7 @@ jobs:
             -e GRYPE_REGISTRY_AUTH_USERNAME="${{ github.actor }}" \
             -e GRYPE_REGISTRY_AUTH_PASSWORD="${{ secrets.GITHUB_TOKEN }}" \
             anchore/grype:v0.87.0 \
-            "${{ env.IMAGEN }}:sha-${{ github.sha }}" --only-fixed --fail-on critical
+            "${{ env.IMAGEN }}:sha-${{ github.sha }}" --only-fixed --fail-on negligible
       - name: Resumen de Seguridad (${{ matrix.servicio }})
         if: always()
         run: |
