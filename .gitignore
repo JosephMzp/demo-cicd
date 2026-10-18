@@ -3,3 +3,10 @@ node_modules/
 coverage/
 .DS_Store
 Thumbs.db
+
+# Terraform
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/*.exe
+terraform/.terraform.lock.hcl
