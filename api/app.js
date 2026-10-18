@@ -1,5 +1,4 @@
 // Libro de visitas: la aplicación Express, separada del arranque del servidor.
-//
 // crearApp recibe el pool de Postgres desde afuera. Así las pruebas unitarias
 // le pasan un pool falso y no necesitan una base de datos de verdad.
 // Toda la configuración entra por variables de entorno: aquí no hay contraseñas.
@@ -35,6 +34,13 @@ export function crearApp({ pool, registro = new client.Registry() }) {
     }
   });
 
+  app.get("/api/estadisticas", async (_req, res, next) => {
+    try {
+      const { rows } = await pool.query("SELECT COUNT(*)::int AS total FROM mensajes");
+      res.json({ total: Number(rows[0]?.total ?? 0) });
+    } catch (e) { next(e); }
+  });
+
   app.get("/api/mensajes", async (_req, res, next) => {
     try {
       const { rows } = await pool.query(
@@ -47,11 +53,9 @@ export function crearApp({ pool, registro = new client.Registry() }) {
   app.post("/api/mensajes", async (req, res, next) => {
     const nombre = String(req.body?.nombre ?? "").trim();
     const mensaje = String(req.body?.mensaje ?? "").trim();
-
     if (!nombre || !mensaje) return res.status(400).json({ error: "Faltan el nombre o el mensaje." });
     if (nombre.length > 60) return res.status(400).json({ error: "El nombre no puede pasar de 60 caracteres." });
     if (mensaje.length > 280) return res.status(400).json({ error: "El mensaje no puede pasar de 280 caracteres." });
-
     try {
       const { rows } = await pool.query(
         // Parámetros, nunca concatenar texto del usuario dentro del SQL.

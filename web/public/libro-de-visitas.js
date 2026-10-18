@@ -1,14 +1,11 @@
 // Libro de visitas: cliente de la API del LAB-02.
-//
 // La API vive en /api/ del MISMO origen que la página: nginx reenvía esa ruta al backend.
-// Por eso aquí no hay ninguna URL absoluta ni ningún puerto: eso es configuración de
-// infraestructura, no del frontend.
 const API = "/api";
-
 const seccion = document.getElementById("libro-de-visitas");
 const lista = document.getElementById("lista-mensajes");
 const form = document.getElementById("form-mensaje");
 const estado = document.getElementById("form-estado");
+const totalSpan = document.getElementById("total-mensajes");
 
 function pintar(mensajes) {
   lista.replaceChildren(
@@ -33,6 +30,12 @@ async function cargar() {
   const esJson = (r.headers.get("content-type") || "").includes("application/json");
   if (!r.ok || !esJson) throw new Error(`la API no está disponible (HTTP ${r.status})`);
   pintar(await r.json());
+
+  const rEst = await fetch(`${API}/estadisticas`, { headers: { Accept: "application/json" } });
+  if (rEst.ok) {
+    const { total } = await rEst.json();
+    if (totalSpan) totalSpan.textContent = `(${total} mensajes)`;
+  }
 }
 
 form.addEventListener("submit", async (e) => {
