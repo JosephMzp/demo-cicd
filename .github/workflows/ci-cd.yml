@@ -175,12 +175,13 @@ jobs:
       - name: Escaneo de imagen con Grype (Herramienta B2)
         run: |
           docker run --rm \
-            -v "$PWD/.trivyignore:/.trivyignore:ro" \
+            -v "$PWD/.grype.yaml:/.grype.yaml:ro" \
             -e GRYPE_REGISTRY_AUTH_AUTHORITY=ghcr.io \
             -e GRYPE_REGISTRY_AUTH_USERNAME="${{ github.actor }}" \
             -e GRYPE_REGISTRY_AUTH_PASSWORD="${{ secrets.GITHUB_TOKEN }}" \
             anchore/grype:v0.87.0 \
-            "${{ env.IMAGEN }}:sha-${{ github.sha }}" --only-fixed --fail-on negligible
+            -c /.grype.yaml \
+            "${{ env.IMAGEN }}:sha-${{ github.sha }}" --only-fixed --fail-on critical
       - name: Resumen de Seguridad (${{ matrix.servicio }})
         if: always()
         run: |

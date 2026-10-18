@@ -1,0 +1,4 @@
+# Aceptada para el LAB-04 (18/10/2026).
+# Vulnerabilidad en el binario 'gosu' de postgres:16-alpine. No es explotable en este contexto.
+ignore:
+  - vulnerability: CVE-2025-68121
