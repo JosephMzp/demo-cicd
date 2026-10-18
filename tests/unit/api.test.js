@@ -24,6 +24,15 @@ describe("GET /api/health", () => {
   });
 });
 
+describe("GET /api/estadisticas", () => {
+  it("devuelve el total de mensajes registrados", async () => {
+    const app = appConPool(vi.fn().mockResolvedValue({ rows: [{ total: 5 }] }));
+    const r = await request(app).get("/api/estadisticas");
+    expect(r.status).toBe(200);
+    expect(r.body).toEqual({ total: 5 });
+  });
+});
+
 describe("POST /api/mensajes", () => {
   it("rechaza con 400 si falta el nombre, sin tocar la base", async () => {
     const query = vi.fn();

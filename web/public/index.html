@@ -1,27 +1,32 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Libro de visitas, IF-1116</title>
   <link rel="stylesheet" href="estilos.css">
 </head>
+
 <body>
   <header>
-    <h1 class="titulo">Libro de visitas</h1>
-    <p>Aplicación de ejemplo del curso IF-1116, Tópicos de Tecnologías de Información. Semana 06: herramientas DevOps y pipelines CI/CD.</p>
+    <h1 class="titulo">Libro de visitas <span id="total-mensajes"></span></h1>
+    <p>Aplicación de ejemplo del curso IF-1116, Tópicos de Tecnologías de Información. Semana 06: herramientas DevOps y
+      pipelines CI/CD.</p>
   </header>
 
   <main>
     <section id="sobre-la-app">
       <h2>Qué es esto</h2>
-      <p>Tres servicios en contenedores: <strong>web</strong> (nginx), <strong>api</strong> (Node.js) y <strong>db</strong> (Postgres). Lo interesante no está en la página. Está en el pipeline que la construye, la prueba, la empaqueta, la escanea y la despliega.</p>
+      <p>Tres servicios en contenedores: <strong>web</strong> (nginx), <strong>api</strong> (Node.js) y
+        <strong>db</strong> (Postgres). Lo interesante no está en la página. Está en el pipeline que la construye, la
+        prueba, la empaqueta, la escanea y la despliega.
+      </p>
       <p>Versión desplegada: <code id="version">local</code></p>
     </section>
 
     <section id="libro-de-visitas" hidden>
       <h2>Deja tu mensaje</h2>
-
       <form id="form-mensaje">
         <label>Tu nombre
           <input name="nombre" maxlength="60" required>
@@ -32,7 +37,6 @@
         <button type="submit">Dejar mensaje</button>
         <p id="form-estado" role="status"></p>
       </form>
-
       <ul id="lista-mensajes"></ul>
     </section>
   </main>
@@ -40,7 +44,7 @@
   <footer>
     <p>Hecho con Git, GitHub Actions, Docker y Kubernetes. IF-1116, 2026-II</p>
   </footer>
-
   <script src="libro-de-visitas.js" defer></script>
 </body>
+
 </html>
