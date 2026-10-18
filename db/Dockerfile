@@ -5,4 +5,6 @@
 # es decir, la primera vez que arranca con un volumen nuevo.
 FROM postgres:16-alpine
 
+RUN apk update && apk upgrade --no-cache
+
 COPY init/ /docker-entrypoint-initdb.d/
