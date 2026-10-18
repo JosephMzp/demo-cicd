@@ -1,0 +1,222 @@
+name: CI/CD
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  lint:
+    name: 1. Lint (ESLint, HTMLHint, Hadolint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: "**/package-lock.json"
+      - run: npm ci && npm ci --prefix api
+      - run: npm run lint
+      - name: Hadolint sobre los tres Dockerfiles
+        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
+        with:
+          recursive: true
+          config: .hadolint.yaml
+          failure-threshold: warning
+
+  sast:
+    name: 2. SAST (Semgrep) y secretos (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Semgrep, análisis estático del código
+        run: >
+          docker run --rm -v "$PWD:/src:ro" semgrep/semgrep:1.180.0
+          semgrep scan --config p/ci --config p/dockerfile --error --metrics=off /src
+      - name: Gitleaks, secretos en el historial de Git
+        run: >
+          docker run --rm -v "$PWD:/repo:ro" --entrypoint sh ghcr.io/gitleaks/gitleaks:v8.30.1
+          -c "git config --global --add safe.directory /repo && gitleaks git /repo --redact -v --exit-code 1"
+
+  test-unit:
+    name: 3. Pruebas unitarias y del sitio
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: "**/package-lock.json"
+      - run: npm ci && npm ci --prefix api
+      - run: npm run test:unit
+      - run: npm run test:site
+
+  test-integration:
+    name: 4. Pruebas de integración (Compose)
+    needs: test-unit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Levantar la aplicación
+        run: |
+          echo "DB_PASSWORD=$(openssl rand -hex 12)" > .env
+          docker compose up -d --build --wait
+      - run: npm run test:integration
+      - name: Logs de los contenedores (solo si algo falló)
+        if: failure()
+        run: docker compose logs
+      - name: Apagar
+        if: always()
+        run: docker compose down -v
+
+  package:
+    name: 5. Empaquetar y publicar (${{ matrix.servicio }})
+    needs: [test-integration, sast]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        servicio: [web, api, db]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Nombre de la imagen (GHCR exige minúsculas)
+        run: echo "IMAGEN=ghcr.io/$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')/demo-cicd-${{ matrix.servicio }}" >> "$GITHUB_ENV"
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGEN }}
+          tags: type=sha,format=long,prefix=sha-
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ./${{ matrix.servicio }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.servicio }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.servicio }}
+
+  security:
+    name: 6. Escaneo de imagen (${{ matrix.servicio }})
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      matrix:
+        servicio: [web, api, db]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Nombre de la imagen
+        run: echo "IMAGEN=ghcr.io/$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')/demo-cicd-${{ matrix.servicio }}" >> "$GITHUB_ENV"
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          image-ref: ${{ env.IMAGEN }}:sha-${{ github.sha }}
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+          trivyignores: .trivyignore
+
+  deploy-dev:
+    name: 7. Deploy DEV (efímero) y smoke
+    needs: security
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment: dev
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: echo "PREFIJO=ghcr.io/$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')/demo-cicd" >> "$GITHUB_ENV"
+      - name: Crear el clúster (kind)
+        uses: helm/kind-action@1544676c07bb3570fcb70166beaa07c4528fd4aa # v1.15.1
+        with:
+          cluster_name: dev
+      - name: Namespace y secretos
+        run: |
+          kubectl create namespace demo-dev
+          kubectl -n demo-dev create secret docker-registry ghcr \
+            --docker-server=ghcr.io --docker-username="${{ github.actor }}" --docker-password="${{ secrets.GITHUB_TOKEN }}"
+          kubectl -n demo-dev create secret generic db-credenciales --from-literal=DB_PASSWORD="$(openssl rand -hex 16)"
+      - name: Desplegar
+        run: scripts/desplegar.sh k8s/overlays/dev "$PREFIJO" "sha-${{ github.sha }}"
+      - name: Esperar el rollout
+        run: |
+          kubectl -n demo-dev rollout status deploy/db  --timeout=180s
+          kubectl -n demo-dev rollout status deploy/api --timeout=180s
+          kubectl -n demo-dev rollout status deploy/web --timeout=180s
+      - name: Smoke test y pruebas de integración contra DEV
+        run: |
+          kubectl -n demo-dev port-forward svc/web 8080:80 &
+          sleep 3
+          bash scripts/smoke.sh http://localhost:8080
+          APP_URL=http://localhost:8080 npm run test:integration
+      - name: Diagnóstico (solo si algo falló)
+        if: failure()
+        run: |
+          kubectl -n demo-dev get all
+          kubectl -n demo-dev describe pods
+          kubectl -n demo-dev logs -l app=api --tail=50 || true
+          kubectl -n demo-dev logs -l app=db  --tail=50 || true
+
+  deploy-staging:
+    name: 8. Deploy STAGING (con aprobación)
+    needs: deploy-dev
+    if: github.event_name != 'pull_request'
+    runs-on: self-hosted
+    environment:
+      name: staging
+      url: http://localhost:30080
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: echo "PREFIJO=ghcr.io/$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')/demo-cicd" >> "$GITHUB_ENV"
+      - name: Desplegar la misma imagen que pasó por DEV
+        run: scripts/desplegar.sh k8s/overlays/staging "$PREFIJO" "sha-${{ github.sha }}"
+      - name: Esperar el rollout
+        run: |
+          kubectl -n demo-staging rollout status deploy/db  --timeout=180s
+          kubectl -n demo-staging rollout status deploy/api --timeout=180s
+          kubectl -n demo-staging rollout status deploy/web --timeout=180s
+      - name: Smoke test
+        run: bash scripts/smoke.sh http://localhost:30080
