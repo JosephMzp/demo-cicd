@@ -2,6 +2,8 @@
 # tag fijo, dependencias antes que código, sin root, sin secretos, imagen chica, un proceso.
 FROM node:22-alpine
 
+RUN apk update && apk upgrade --no-cache
+
 ENV NODE_ENV=production
 WORKDIR /app
 
