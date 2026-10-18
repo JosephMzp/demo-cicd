@@ -6,7 +6,31 @@
 # Se vuelve a revisar cuando la imagen oficial actualice gosu. Aceptada el 09/10/2026.
 CVE-2025-68121
 
-# Aceptadas para el LAB-04. Vulnerabilidades HIGH en brace-expansion 
-# (dependencia de desarrollo/transitiva de npm). No afectan directamente a producción.
-CVE-2026-102276
-CVE-2026-102278
+# Aceptadas para el LAB-04 (18/10/2026). 
+# Vulnerabilidades HIGH en el binario de Go de 'gosu' incluido en postgres:16-alpine.
+# gosu solo se ejecuta localmente durante un segundo en el entrypoint para bajar privilegios.
+# No procesa peticiones HTTP/TLS ni de red externas, por lo que estas CVEs no son explotables aquí.
+CVE-2025-61726
+CVE-2025-61729
+CVE-2026-25679
+CVE-2026-27145
+CVE-2026-32280
+CVE-2026-32281
+CVE-2026-32283
+CVE-2026-33811
+CVE-2026-33814
+CVE-2026-33818
+CVE-2026-39820
+CVE-2026-39821
+CVE-2026-39822
+CVE-2026-39836
+CVE-2026-42499
+CVE-2026-42504
+CVE-2026-56853
+CVE-2026-56858
+CVE-2026-56859
+CVE-2026-56860
+CVE-2026-56862
+CVE-2026-78667
+CVE-2026-78669
+CVE-2026-97031
