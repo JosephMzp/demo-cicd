@@ -1,0 +1,159 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-provisioning
+data:
+  datasource.yml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        uid: prometheus
+        access: proxy
+        url: http://prometheus:9090
+        isDefault: true
+
+  dashboards.yml: |
+    apiVersion: 1
+    providers:
+      - name: demo-cicd
+        folder: ""
+        type: file
+        options:
+          path: /var/lib/grafana/dashboards
+
+  alerting.yml: |
+    apiVersion: 1
+    groups:
+      - orgId: 1
+        name: api-red-alerts
+        folder: Alertas STAGING
+        interval: 10s
+        rules:
+          - uid: alert-5xx-staging
+            title: Tasa de errores 5xx > 5% (1m)
+            condition: C
+            for: 1m
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 60
+                  to: 0
+                datasourceUid: prometheus
+                model:
+                  expr: 100 * (sum(rate(http_request_duration_seconds_count{status=~"5.."}[1m])) or vector(0)) / sum(rate(http_request_duration_seconds_count[1m]))
+                  instant: true
+                  refId: A
+              - refId: C
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  conditions:
+                    - evaluator:
+                        type: gt
+                        params: [5]
+            annotations:
+              summary: "La tasa de errores 5xx en la API superó el 5% durante 1 minuto"
+            labels:
+              severity: critical
+
+  libro-de-visitas.json: |
+    {
+      "uid": "libro-de-visitas",
+      "title": "Libro de visitas: métricas RED",
+      "tags": ["demo-cicd"],
+      "timezone": "browser",
+      "refresh": "10s",
+      "time": { "from": "now-15m", "to": "now" },
+      "schemaVersion": 39,
+      "panels": [
+        {
+          "id": 1, "type": "timeseries", "title": "Rate: peticiones por segundo",
+          "gridPos": { "x": 0, "y": 0, "w": 8, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "refId": "A", "expr": "sum by (route) (rate(http_request_duration_seconds_count[1m]))", "legendFormat": "{{route}}" }]
+        },
+        {
+          "id": 2, "type": "timeseries", "title": "Errors: porcentaje de respuestas 5xx",
+          "gridPos": { "x": 8, "y": 0, "w": 8, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": { "defaults": { "unit": "percent" }, "overrides": [] },
+          "targets": [{ "refId": "A", "expr": "100 * (sum(rate(http_request_duration_seconds_count{status=~\"5..\"}[1m])) or vector(0)) / sum(rate(http_request_duration_seconds_count[1m]))", "legendFormat": "5xx" }]
+        },
+        {
+          "id": 3, "type": "timeseries", "title": "Duration: latencia p95",
+          "gridPos": { "x": 16, "y": 0, "w": 8, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+          "targets": [{ "refId": "A", "expr": "histogram_quantile(0.95, sum by (le, route) (rate(http_request_duration_seconds_bucket[5m])))", "legendFormat": "{{route}}" }]
+        }
+      ]
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:11.4.0
+          ports:
+            - containerPort: 3000
+          env:
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: "true"
+            - name: GF_AUTH_ANONYMOUS_ORG_ROLE
+              value: "Admin"
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            - name: provisioning
+              mountPath: /etc/grafana/provisioning/datasources/datasource.yml
+              subPath: datasource.yml
+            - name: provisioning
+              mountPath: /etc/grafana/provisioning/dashboards/dashboards.yml
+              subPath: dashboards.yml
+            - name: provisioning
+              mountPath: /etc/grafana/provisioning/alerting/alerting.yml
+              subPath: alerting.yml
+            - name: provisioning
+              mountPath: /var/lib/grafana/dashboards/libro-de-visitas.json
+              subPath: libro-de-visitas.json
+      volumes:
+        - name: provisioning
+          configMap:
+            name: grafana-provisioning
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+spec:
+  type: NodePort
+  selector:
+    app: grafana
+  ports:
+    - port: 3000
+      targetPort: 3000
+      nodePort: 30030

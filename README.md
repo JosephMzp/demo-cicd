@@ -149,6 +149,24 @@ Se midio el tiempo del primer run completo en verde (Antes) frente al pipeline o
   - Pipeline en verde en GitLab.com: [Enlace a pipeline en GitLab](https://gitlab.com/JosephMzp/demo-cicd/-/pipelines/2961487445)
 - **Que no me funciono:** En GitLab CI, los jobs con `when: manual` por defecto tienen `allow_failure: true`, lo que mostraba el pipeline como "passed with warnings" antes de hacer clic en el deploy. Lo solucione agregando explicitamente `allow_failure: false` para que el pipeline espere la aprobacion manual real antes de marcarse como completado.
 
+### Reto 3: Observabilidad en STAGING (Prometheus + Grafana)
+
+- **Decisión:** Desplegar Prometheus (`prom/prometheus:v3.1.0`) y Grafana (`grafana/grafana:11.4.0`) de forma declarativa en el namespace `demo-staging` mediante Kustomize (`k8s/overlays/staging`), configurando descubrimiento automático de pods (`kubernetes_sd_configs`) con RBAC de lectura mínima, aprovisionamiento automático del dashboard RED y una regla de alerta que se dispara cuando el porcentaje de errores `5xx` supera el 5% durante 1 minuto.
+- **Alternativas que evalué:**
+  - *Manifiestos declarativos en Kustomize vs. Helm chart `kube-prometheus-stack`:* El chart de Helm instala operadores, CRDs y exportadores de nodos pesados para un entorno local y requiere comandos manuales fuera del flujo GitOps/Kustomize. Integrar los manifiestos en `k8s/overlays/staging` mantiene las versiones exactas de las imágenes en Git y permite que el job `deploy-staging` los aplique automáticamente.
+  - *Scraping estático (`api:3000`) vs. Service Discovery de pods (`role: pod`):* Apuntar al Service `api:3000` balancea cada scrape al azar entre las 2 réplicas de STAGING, mezclando sus contadores. Con `kubernetes_sd_configs` y las anotaciones `prometheus.io/*`, Prometheus raspa cada réplica de forma independiente.
+- **Por qué elegí esta:** Permite observabilidad completa en Kubernetes sin dependencias manuales, respeta el principio de privilegio mínimo con un `Role` acotado a `demo-staging` y evalúa la alerta tanto en Prometheus como en Grafana Alerting.
+- **Pregunta de investigación (¿Qué métrica agregarías a la API para saber si la base de datos se está volviendo lenta?):** Agregaría un **Histograma en `prom-client`** llamado `db_query_duration_seconds` con etiquetas `operation` (`SELECT`, `INSERT`) y `table` (`mensajes`), envolviendo las llamadas a `pool.query()` en `api/app.js`, complementado con un **Gauge** `db_pool_waiting_clients` (`pool.waitingCount` de `pg-pool`). Así podríamos separar en Grafana si un aumento en la latencia `p95` de la API se debe al procesamiento en Node.js o a consultas lentas/saturación de conexiones en PostgreSQL.
+- **Fuentes consultadas:**
+  - [Prometheus Configuration - Kubernetes SD Config](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#kubernetes_sd_config)
+  - [Prometheus Alerting Rules Documentation](https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/)
+  - [Grafana Provisioning - Dashboards, Datasources & Alerting](https://grafana.com/docs/grafana/latest/administration/provisioning/)
+- **Cómo lo verifiqué:**
+  - PR de implementación: `[Enlace a tu PR]`
+  - Run de despliegue a STAGING: `[Enlace a tu Run]`
+  - Prueba de alerta: Se escaló temporalmente `deploy/db` a 0 réplicas en `demo-staging` mientras se inyectaba tráfico a `/api/mensajes`, verificando que la tasa de respuestas `500` superó el 5% por más de 1 minuto y activó la alerta `HighErrorRate5xx` a estado `FIRING`.
+- **Qué no me funcionó:** Inicialmente, la expresión PromQL `sum(rate(http_request_duration_seconds_count{status=~"5.."}[1m]))` devolvía `No data` en Grafana cuando el sistema estaba sano porque la serie con etiqueta `status="500"` no existe hasta que ocurre el primer error. Lo solucioné agregando `or vector(0)` en el numerador para graficar `0%` de forma continua.
+
 ### Reto 6: La plataforma tambien es codigo (Terraform)
 
 - **Decision:** Codificar la configuracion de gobierno del repositorio (`demo-cicd`) usando Terraform y el provider oficial `integrations/github` (`v6.6.0`) en `terraform/main.tf`, incluyendo los environments `dev` y `staging` (con revisores requeridos) y el ruleset de proteccion de la rama `main`.
