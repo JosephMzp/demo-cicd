@@ -101,3 +101,30 @@ Se midio el tiempo del primer run completo en verde (Antes) frente al pipeline o
 - Run en verde (con configuracion final y .grype.yaml): [Ver Run en Verde B2](https://github.com/JosephMzp/demo-cicd/actions/runs/39149814627?pr=14)
 
 **Que no me funciono:** Al activar Grype inicialmente junto a Trivy, Grype bloqueo la imagen `demo-cicd-db` por la vulnerabilidad `CVE-2025-68121` del binario `gosu`, debido a que Grype no lee el archivo `.trivyignore`. Aprendi que cada escaner gestiona su propia politica de riesgos y lo solucione creando `.grype.yaml` con la regla `ignore` documentada y montandolo en el contenedor con `-c /.grype.yaml`.
+
+### Reto 1: DAST con OWASP ZAP
+
+- **Decision:** Integrar un escaneo dinamico (DAST) con `ghcr.io/zaproxy/zaproxy:2.16.1` (`zap-baseline.py`) dentro del job `deploy-dev` atacando el servicio `web` expuesto en el cluster `kind`, endurecer `web/nginx.conf` con cabeceras de seguridad HTTP y publicar el reporte HTML/JSON/MD como artefacto del workflow.
+- **Alternativas que evalue:**
+  - *Imagen oficial `ghcr.io/zaproxy/zaproxy:2.16.1` vs. Action `zaproxy/action-baseline`:* La action ejecuta internamente la imagen de ZAP pero agrega pasos adicionales sobre issues de GitHub. Usar el contenedor directo con version fija `2.16.1` y `--network host` permite control total de los flags (`-c rules.tsv`, `-r`, `-J`) y subida limpia con `actions/upload-artifact` fijado por SHA.
+  - *Baseline scan vs. Full scan:* El *baseline scan* realiza spidering pasivo en menos de 1 minuto ideal para cada push en CI, mientras que el *full scan* lanza ataques activos que demoran varios minutos y pueden ensuciar la base de datos.
+- **Por que elegi esta:** Es 100% open source, corre en contenedor con version fija, valida en tiempo real las respuestas HTTP de Nginx + Express en Kubernetes y genera el reporte auditable en cada ejecucion.
+- **Fuentes consultadas:**
+  - [OWASP ZAP Baseline Scan Documentation](https://www.zaproxy.org/docs/docker/baseline-scan/)
+  - [MDN Web Docs - Content-Security-Policy & Security Headers](https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP)
+- **Como lo verifique:**
+  - PR de implementacion y correccion de cabeceras: `[Enlace a tu PR]`
+  - Run con artefacto `owasp-zap-dast-report`: `[Enlace a tu Run]`
+- **Que no me funciono:** En la primera prueba local sin cabeceras en `nginx.conf`, ZAP reporto alertas por ausencia de `Content-Security-Policy`, `X-Content-Type-Options`, `X-Frame-Options` y divulgacion de version de Nginx (`Server: nginx/1.29.x`). Las corregi en `web/nginx.conf` con `add_header ... always;` y `server_tokens off;`, y documente en `.zap/rules.tsv` las reglas que no aplican a HTTP local sin TLS (`10035` HSTS).
+
+### Reto 6: La plataforma tambien es codigo (Terraform)
+
+- **Decision:** Codificar la configuracion de gobierno del repositorio (`demo-cicd`) usando Terraform y el provider oficial `integrations/github` (`v6.6.0`) en `terraform/main.tf`, incluyendo los environments `dev` y `staging` (con revisores requeridos) y el ruleset de proteccion de la rama `main`.
+- **Alternativas que evalue:**
+  - *Terraform con `integrations/github` vs. Ansible para el runner:* Terraform permite auditar y versionar las reglas de proteccion de ramas y compuertas de aprobacion de GitHub de forma declarativa e idempotente (`terraform plan`), lo cual asegura que nadie desactive un check de seguridad manualmente en la interfaz web.
+- **Por que elegi esta:** Garantiza reproducibilidad de las compuertas del pipeline (DevSecOps governance as code) y se conecta directamente con lo que veremos en la Semana 07.
+- **Fuentes consultadas:**
+  - [Terraform Registry - integrations/github Provider](https://registry.terraform.io/providers/integrations/github/latest/docs)
+  - [Recurso github_repository_ruleset](https://registry.terraform.io/providers/integrations/github/latest/docs/resources/repository_ruleset)
+- **Como lo verifique:** Importe los recursos existentes con `terraform import` y ejecute `terraform plan`, obteniendo `No changes. Your infrastructure matches the configuration.`
+- **Que no me funciono:** Al importar el ruleset inicialmente, el orden y nombres exactos de los status checks (`context`) debian coincidir caracter por caracter con el campo `name:` de cada job en `ci-cd.yml` (incluyendo las variantes de `matrix.servicio`). Ajuste los 10 contextos requeridos hasta lograr cero drift en el plan.

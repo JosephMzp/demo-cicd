@@ -232,6 +232,30 @@ jobs:
           sleep 3
           bash scripts/smoke.sh http://localhost:8080
           APP_URL=http://localhost:8080 npm run test:integration
+          
+      - name: DAST con OWASP ZAP Baseline contra DEV (Reto 1)
+        run: |
+          mkdir -p zap-reports && chmod 777 zap-reports
+          docker run --rm --network host \
+            -v "$PWD/zap-reports:/zap/wrk/:rw" \
+            -v "$PWD/.zap/rules.tsv:/zap/wrk/rules.tsv:ro" \
+            ghcr.io/zaproxy/zaproxy:2.16.1 \
+            zap-baseline.py -t http://localhost:8080 \
+            -c rules.tsv \
+            -r zap-report.html \
+            -J zap-report.json \
+            -w zap-report.md \
+            -I
+      - name: Subir reporte de OWASP ZAP como artefacto
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: owasp-zap-dast-report
+          path: |
+            zap-reports/zap-report.html
+            zap-reports/zap-report.json
+            zap-reports/zap-report.md
+          retention-days: 14
       - name: Resumen de DEV
         if: always()
         run: |

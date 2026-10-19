@@ -1,0 +1,4 @@
+# Reglas de OWASP ZAP Baseline documentadas para demo-cicd (Reto 1 - LAB-04)
+10035	IGNORE	Strict-Transport-Security (HSTS) no aplica en DEV efimero sobre HTTP local.
+10049	IGNORE	Storable and Cacheable Content: los archivos HTML/CSS/JS son publicos y sin datos sensibles.
+10096	IGNORE	Timestamp Disclosure: las fechas en respuestas corresponden a los mensajes publicos del libro de visitas.
