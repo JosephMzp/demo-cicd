@@ -76,6 +76,24 @@ Se midio el tiempo del primer run completo en verde (Antes) frente al pipeline o
 
 ---
 
+## Equivalencias GitHub Actions vs. GitLab CI (Reto 2)
+
+| Concepto / Funcionalidad | GitHub Actions (`.github/workflows/ci-cd.yml`) | GitLab CI (`.gitlab-ci.yml`) |
+|---|---|---|
+| **Archivo de definicion** | `.github/workflows/*.yml` | `.gitlab-ci.yml` en la raiz del repositorio |
+| **Orden y dependencias** | `needs: [job_a, job_b]` | `stages:` globales + `needs:` para DAG |
+| **Ejecucion paralela (Matriz)** | `strategy: matrix: servicio: [web, api, db]` | `parallel: matrix: - SERVICIO: [web, api, db]` |
+| **Contenedor base del job** | `runs-on: ubuntu-latest` (VM completa) | `image: node:22-alpine` (contenedor directo) |
+| **Docker en el runner** | Viene preinstalado en `ubuntu-latest` | `image: docker:27.3.1` + `services: [docker:27.3.1-dind]` |
+| **Registro de contenedores** | `ghcr.io/<owner>` | `$CI_REGISTRY_IMAGE` (`registry.gitlab.com/<user>/<repo>`) |
+| **Credenciales efimeras** | `${{ secrets.GITHUB_TOKEN }}` y `${{ github.actor }}` | `$CI_REGISTRY_PASSWORD` y `$CI_REGISTRY_USER` |
+| **SHA del commit** | `${{ github.sha }}` | `$CI_COMMIT_SHA` / `$CI_COMMIT_SHORT_SHA` |
+| **Compuerta de aprobacion** | `environment: staging` (Required reviewers en UI) | `environment: name: staging` + `when: manual` |
+| **Condicion de rama `main`** | `if: github.event_name != 'pull_request'` | `rules: - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH` |
+| **Plantillas de seguridad** | Actions del Marketplace fijadas por SHA | `include: - template: Security/SAST.gitlab-ci.yml` |
+
+---
+
 ## Bitacora de Decisiones
 
 ### B2: Cambio de dos herramientas del menu (Secretos y Escaneo de Imagenes)
@@ -116,6 +134,20 @@ Se midio el tiempo del primer run completo en verde (Antes) frente al pipeline o
   - PR de implementacion y correccion de cabeceras: [PR #15](https://github.com/JosephMzp/demo-cicd/pull/18)
   - Run con artefacto `owasp-zap-dast-report`: [Ver Run en Actions](https://github.com/JosephMzp/demo-cicd/actions/runs/39179972776)
 - **Que no me funciono:** En la primera prueba local sin cabeceras en `nginx.conf`, ZAP reporto alertas por ausencia de `Content-Security-Policy`, `X-Content-Type-Options`, `X-Frame-Options` y divulgacion de version de Nginx (`Server: nginx/1.29.x`). Las corregi en `web/nginx.conf` con `add_header ... always;` y `server_tokens off;`, y documente en `.zap/rules.tsv` las reglas que no aplican a HTTP local sin TLS (`10035` HSTS).
+
+### Reto 2: El mismo pipeline en GitLab CI
+
+- **Decision:** Implementar `.gitlab-ci.yml` replicando las etapas de `test` (lint + unit + SAST template), `build` (construccion en paralelo con `docker:27.3.1-dind` hacia GitLab Container Registry usando `$CI_REGISTRY_IMAGE`) y `deploy` (con compuerta manual `when: manual` y `allow_failure: false`).
+- **Alternativas que evalue:**
+  - *Docker-in-Docker (`services: [docker:27.3.1-dind]`) vs. Kaniko (`gcr.io/kaniko-project/executor`):* Kaniko construye sin daemon privilegiado, pero `docker:dind` en los shared runners de GitLab.com permite usar los comandos estandar `docker build` y `docker push` identicos al flujo de GitHub Actions.
+  - *Importacion por URL (Repository Mirroring) vs. Push directo a segundo remote:* Importar el proyecto desde GitHub en GitLab.com y añadir un remote `gitlab` en Git local permite sincronizar commits en segundos.
+- **Por que elegi esta:** Aprovecha las variables predefinidas de GitLab (`$CI_REGISTRY_USER`, `$CI_REGISTRY_PASSWORD`, `$CI_COMMIT_SHORT_SHA`) sin configurar ningun secreto manual y demuestra portabilidad entre motores CI/CD.
+- **Fuentes consultadas:**
+  - [GitLab CI/CD YAML Syntax Reference](https://docs.gitlab.com/ee/ci/yaml/)
+  - [GitLab Container Registry & Docker-in-Docker](https://docs.gitlab.com/ee/ci/docker/using_docker_build.html)
+- **Como lo verifique:**
+  - Pipeline en verde en GitLab.com: `[Enlace a tu pipeline en GitLab]`
+- **Que no me funciono:** En GitLab CI, los jobs con `when: manual` por defecto tienen `allow_failure: true`, lo que mostraba el pipeline como "passed with warnings" antes de hacer clic en el deploy. Lo solucione agregando explicitamente `allow_failure: false` para que el pipeline espere la aprobacion manual real antes de marcarse como completado.
 
 ### Reto 6: La plataforma tambien es codigo (Terraform)
 
