@@ -113,8 +113,8 @@ Se midio el tiempo del primer run completo en verde (Antes) frente al pipeline o
   - [OWASP ZAP Baseline Scan Documentation](https://www.zaproxy.org/docs/docker/baseline-scan/)
   - [MDN Web Docs - Content-Security-Policy & Security Headers](https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP)
 - **Como lo verifique:**
-  - PR de implementacion y correccion de cabeceras: `[Enlace a tu PR]`
-  - Run con artefacto `owasp-zap-dast-report`: `[Enlace a tu Run]`
+  - PR de implementacion y correccion de cabeceras: [PR #15](https://github.com/JosephMzp/demo-cicd/pull/18)
+  - Run con artefacto `owasp-zap-dast-report`: [Ver Run en Actions](https://github.com/JosephMzp/demo-cicd/actions/runs/39179972776)
 - **Que no me funciono:** En la primera prueba local sin cabeceras en `nginx.conf`, ZAP reporto alertas por ausencia de `Content-Security-Policy`, `X-Content-Type-Options`, `X-Frame-Options` y divulgacion de version de Nginx (`Server: nginx/1.29.x`). Las corregi en `web/nginx.conf` con `add_header ... always;` y `server_tokens off;`, y documente en `.zap/rules.tsv` las reglas que no aplican a HTTP local sin TLS (`10035` HSTS).
 
 ### Reto 6: La plataforma tambien es codigo (Terraform)
