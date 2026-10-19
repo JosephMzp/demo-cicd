@@ -146,7 +146,7 @@ Se midio el tiempo del primer run completo en verde (Antes) frente al pipeline o
   - [GitLab CI/CD YAML Syntax Reference](https://docs.gitlab.com/ee/ci/yaml/)
   - [GitLab Container Registry & Docker-in-Docker](https://docs.gitlab.com/ee/ci/docker/using_docker_build.html)
 - **Como lo verifique:**
-  - Pipeline en verde en GitLab.com: `[Enlace a tu pipeline en GitLab]`
+  - Pipeline en verde en GitLab.com: [Enlace a pipeline en GitLab](https://gitlab.com/JosephMzp/demo-cicd/-/pipelines/2961487445)
 - **Que no me funciono:** En GitLab CI, los jobs con `when: manual` por defecto tienen `allow_failure: true`, lo que mostraba el pipeline como "passed with warnings" antes de hacer clic en el deploy. Lo solucione agregando explicitamente `allow_failure: false` para que el pipeline espere la aprobacion manual real antes de marcarse como completado.
 
 ### Reto 6: La plataforma tambien es codigo (Terraform)
