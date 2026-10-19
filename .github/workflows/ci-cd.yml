@@ -290,5 +290,7 @@ jobs:
           kubectl -n demo-staging rollout status deploy/db  --timeout=180s
           kubectl -n demo-staging rollout status deploy/api --timeout=180s
           kubectl -n demo-staging rollout status deploy/web --timeout=180s
+          kubectl -n demo-staging rollout status deploy/prometheus --timeout=180s
+          kubectl -n demo-staging rollout status deploy/grafana    --timeout=180s
       - name: Smoke test
         run: bash scripts/smoke.sh http://localhost:30080
