@@ -1,0 +1,67 @@
+# .gitlab-ci.yml - Equivalente del pipeline CI/CD en GitLab CI (Reto 2 - LAB-04)
+stages:
+  - test
+  - build
+  - deploy
+
+variables:
+  NODE_VERSION: "22"
+  DOCKER_TLS_CERTDIR: "/certs"
+
+# 1. Etapa TEST: Lint, SAST (plantilla GitLab) y Pruebas Unitarias/Sitio
+include:
+  - template: Security/SAST.gitlab-ci.yml
+
+lint-and-unit-tests:
+  stage: test
+  image: node:22-alpine
+  cache:
+    key:
+      files:
+        - package-lock.json
+        - api/package-lock.json
+    paths:
+      - node_modules/
+      - api/node_modules/
+  script:
+    - npm ci && npm ci --prefix api
+    - npm run lint
+    - npm run test:unit
+    - npm run test:site
+
+# 2. Etapa BUILD: Construye y publica las 3 imágenes en GitLab Container Registry
+build-images:
+  stage: build
+  image: docker:27.3.1
+  services:
+    - docker:27.3.1-dind
+  needs:
+    - lint-and-unit-tests
+  parallel:
+    matrix:
+      - SERVICIO: [web, api, db]
+  before_script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
+  script:
+    - IMAGEN="$CI_REGISTRY_IMAGE/demo-cicd-$SERVICIO:sha-$CI_COMMIT_SHORT_SHA"
+    - docker build -t "$IMAGEN" "./$SERVICIO"
+    - docker push "$IMAGEN"
+
+# 3. Etapa DEPLOY: Promoción controlada con compuerta manual (when: manual)
+deploy-staging:
+  stage: deploy
+  image: alpine:3.20
+  needs:
+    - build-images
+  environment:
+    name: staging
+  when: manual
+  allow_failure: false
+  script:
+    - echo "Promoviendo imagenes inmutables sha-$CI_COMMIT_SHORT_SHA al entorno STAGING..."
+    - echo "Imagen web: $CI_REGISTRY_IMAGE/demo-cicd-web:sha-$CI_COMMIT_SHORT_SHA"
+    - echo "Imagen api: $CI_REGISTRY_IMAGE/demo-cicd-api:sha-$CI_COMMIT_SHORT_SHA"
+    - echo "Imagen db:  $CI_REGISTRY_IMAGE/demo-cicd-db:sha-$CI_COMMIT_SHORT_SHA"
+    - echo "Despliegue validado exitosamente."
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
