@@ -167,6 +167,26 @@ Se midio el tiempo del primer run completo en verde (Antes) frente al pipeline o
   - Prueba de alerta: Se escaló temporalmente `deploy/db` a 0 réplicas en `demo-staging` mientras se inyectaba tráfico a `/api/mensajes`, verificando que la tasa de respuestas `500` superó el 5% por más de 1 minuto y activó la alerta `HighErrorRate5xx` a estado `FIRING`.
 - **Qué no me funcionó:** Inicialmente, la expresión PromQL `sum(rate(http_request_duration_seconds_count{status=~"5.."}[1m]))` devolvía `No data` en Grafana cuando el sistema estaba sano porque la serie con etiqueta `status="500"` no existe hasta que ocurre el primer error. Lo solucioné agregando `or vector(0)` en el numerador para graficar `0%` de forma continua.
 
+### Reto 4: GitOps con Argo CD
+
+- **Decisión:** Instalar Argo CD en el clúster local de Kubernetes (Rancher Desktop), definir el recurso declarativo `Application` (`k8s/argocd-staging-app.yaml`) apuntando a `k8s/overlays/staging` con políticas `selfHeal: true` y `prune: true`, y refactorizar el job `deploy-staging` para que actualice el `newTag` inmutable (`sha-<commit>`) en `k8s/overlays/staging/kustomization.yaml` y haga commit/push a `main` en lugar de ejecutar `kubectl apply` directo.
+- **Alternativas que evalué:**
+  - *Argo CD vs. Flux CD:* Ambos son proyectos graduados de la CNCF para GitOps. Elegí Argo CD porque ofrece una interfaz visual rica del árbol de recursos en tiempo real, facilita la auditoría del estado `Synced`/`Healthy` y permite forzar el refresh mediante anotaciones de Kubernetes.
+  - *Commit directo a `main` con `[skip ci]` vs. Pull Request automático de promoción:* En este laboratorio la compuerta de aprobación humana ya ocurre en el environment `staging` de GitHub Actions antes de que arranque el job `deploy-staging`. Hacer el commit directo con `[skip ci]` tras la aprobación evita duplicar la espera manual y deja el historial de despliegues trazable en `git log`.
+- **Por qué elegí esta:** Convierte al repositorio Git en la única fuente de verdad del clúster (cumpliendo los cuatro principios de OpenGitOps) y garantiza que cualquier cambio manual en el clúster sea revertido automáticamente por el bucle de reconciliación de Argo CD.
+- **Pregunta de investigación (¿Qué ganas y qué pierdes cuando el pipeline ya no toca el clúster?):**
+  - **Qué ganas:** 1) **Seguridad:** El motor de CI/CD externo no necesita credenciales de administrador del clúster (`kubeconfig`) almacenadas en Secrets; el agente vive dentro del clúster y solo hace *pull* de Git. 2) **Auditoría y Rollback:** `git log` es el historial exacto de qué corre en el clúster y un rollback se reduce a `git revert`. 3) **Reconciliación continua (*Drift detection*):** Si alguien modifica o borra un servicio a mano con `kubectl`, Argo CD detecta la divergencia y restaura el estado declarado en Git (`selfHeal`).
+  - **Qué pierdes / Qué cuesta:** 1) **Complejidad operativa:** Hay que operar y mantener un componente adicional (Argo CD) dentro del clúster. 2) **Feedback asíncrono:** Cuando el pipeline solo hace `git push`, el job de CI termina antes de saber si los pods realmente levantaron (a menos que el pipeline consulte el estado de la `Application` de Argo CD). 3) **Gestión de secretos:** Los secretos ya no pueden crearse al vuelo desde variables del pipeline si todo debe vivir en Git, requiriendo herramientas adicionales como *Sealed Secrets* o *External Secrets Operator*.
+- **Fuentes consultadas:**
+  - [Argo CD Documentation - Getting Started & Automated Sync Policy](https://argo-cd.readthedocs.io/en/stable/user-guide/auto_sync/)
+  - [OpenGitOps Principles](https://opengitops.dev/)
+- **Cómo lo verifiqué:**
+  - PR de implementación: `[Enlace a tu PR]`
+  - Commit automático del pipeline: `[Enlace al commit hecho por github-actions[bot]]`
+  - Run de despliegue GitOps: `[Enlace a tu Run]`
+  - Prueba de *Self-Heal*: Se modificó manualmente el número de réplicas de `deploy/api` en `demo-staging` con `kubectl scale deploy/api --replicas=1` y se verificó que Argo CD detectó el estado `OutOfSync` y lo restauró automáticamente a `2` réplicas en segundos.
+- **Qué no me funcionó:** Al intentar que el job `deploy-staging` hiciera `git push origin HEAD:main`, la protección de la rama (`github_repository_ruleset`) bloqueaba el push directo porque exigía Pull Request para todos los actores. Lo solucioné configurando `bypass_actors` en el ruleset (y reflejándolo en `terraform/main.tf` para mantener cero drift) y agregando `[skip ci]` al mensaje del commit para evitar un bucle infinito de ejecuciones.
+
 ### Reto 6: La plataforma tambien es codigo (Terraform)
 
 - **Decision:** Codificar la configuracion de gobierno del repositorio (`demo-cicd`) usando Terraform y el provider oficial `integrations/github` (`v6.6.0`) en `terraform/main.tf`, incluyendo los environments `dev` y `staging` (con revisores requeridos) y el ruleset de proteccion de la rama `main`.
