@@ -1,0 +1,22 @@
+# k8s/argocd-staging-app.yaml
+# Manifiesto declarativo de Argo CD para el Reto 4 (GitOps en STAGING)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: demo-cicd-staging
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/JosephMzp/demo-cicd.git
+    targetRevision: main
+    path: k8s/overlays/staging
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: demo-staging
+  syncPolicy:
+    automated:
+      prune: true      # Elimina recursos que se borren de Git (auto-prune)
+      selfHeal: true   # Si alguien cambia algo a mano en el clúster, Argo CD lo revierte (self-heal)
+    syncOptions:
+      - CreateNamespace=false

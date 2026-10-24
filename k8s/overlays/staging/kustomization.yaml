@@ -19,3 +19,14 @@ labels:
 patches:
   - path: web-nodeport.yaml
   - path: api-replicas.yaml
+
+images:
+  - name: demo-cicd-web
+    newName: ghcr.io/josephmzp/demo-cicd-web
+    newTag: sha-inicial
+  - name: demo-cicd-api
+    newName: ghcr.io/josephmzp/demo-cicd-api
+    newTag: sha-inicial
+  - name: demo-cicd-db
+    newName: ghcr.io/josephmzp/demo-cicd-db
+    newTag: sha-inicial

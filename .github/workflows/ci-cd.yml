@@ -270,27 +270,43 @@ jobs:
           kubectl -n demo-dev logs -l app=db  --tail=50 || true
 
   deploy-staging:
-    name: 8. Deploy STAGING (con aprobación)
+    name: 8. Deploy STAGING (con aprobación - GitOps Argo CD)
     needs: deploy-dev
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && !contains(github.event.head_commit.message, '[skip ci]')
     runs-on: self-hosted
     environment:
       name: staging
       url: http://localhost:30080
+    permissions:
+      contents: write
     defaults:
       run:
         shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: echo "PREFIJO=ghcr.io/josephmzp/demo-cicd" >> "$GITHUB_ENV"
-      - name: Desplegar la misma imagen que pasó por DEV
-        run: scripts/desplegar.sh k8s/overlays/staging "$PREFIJO" "sha-${{ github.sha }}"
-      - name: Esperar el rollout
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Actualizar tag de imágenes en overlay staging (GitOps)
+        env:
+          COMMIT_SHA: ${{ github.sha }}
         run: |
+          sed -i -E "s/newTag: sha-.*/newTag: sha-${COMMIT_SHA}/g" k8s/overlays/staging/kustomization.yaml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add k8s/overlays/staging/kustomization.yaml
+          git diff --staged --quiet || git commit -m "chore(gitops): promover sha-${COMMIT_SHA} a staging [skip ci]"
+          git push origin HEAD:main
+      - name: Sincronizar Argo CD y verificar rollout en el clúster
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          kubectl apply -f k8s/argocd-staging-app.yaml
+          # Forzar refresh en Argo CD para no esperar los 3 minutos de polling por defecto
+          kubectl -n argocd annotate application demo-cicd-staging argocd.argoproj.io/refresh=normal --overwrite
+          sleep 5
           kubectl -n demo-staging rollout status deploy/db  --timeout=180s
           kubectl -n demo-staging rollout status deploy/api --timeout=180s
           kubectl -n demo-staging rollout status deploy/web --timeout=180s
-          kubectl -n demo-staging rollout status deploy/prometheus --timeout=180s
-          kubectl -n demo-staging rollout status deploy/grafana    --timeout=180s
-      - name: Smoke test
+      - name: Smoke test contra STAGING
         run: bash scripts/smoke.sh http://localhost:30080
