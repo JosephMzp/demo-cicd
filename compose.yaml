@@ -7,7 +7,9 @@ services:
     build: ./web
     image: demo-cicd-web:local
     ports:
-      - "8080:8080"
+      - "8080:80"
+    environment:
+      - API_URL=http://api:3000
     depends_on:
       api:
         condition: service_healthy
