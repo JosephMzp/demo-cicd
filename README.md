@@ -162,7 +162,7 @@ Se midio el tiempo del primer run completo en verde (Antes) frente al pipeline o
   - [Prometheus Alerting Rules Documentation](https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/)
   - [Grafana Provisioning - Dashboards, Datasources & Alerting](https://grafana.com/docs/grafana/latest/administration/provisioning/)
 - **Cómo lo verifiqué:**
-  - PR de implementación: [Enlace a tu PR](https://github.com/JosephMzp/demo-cicd/pull/22)
+  - PR de implementación: [Enlace a PR](https://github.com/JosephMzp/demo-cicd/pull/22)
   - Run de despliegue a STAGING: [GitHub Actions Run](https://github.com/JosephMzp/demo-cicd/actions/runs/39201096675)
   - Prueba de alerta: Se escaló temporalmente `deploy/db` a 0 réplicas en `demo-staging` mientras se inyectaba tráfico a `/api/mensajes`, verificando que la tasa de respuestas `500` superó el 5% por más de 1 minuto y activó la alerta `HighErrorRate5xx` a estado `FIRING`.
 - **Qué no me funcionó:** Inicialmente, la expresión PromQL `sum(rate(http_request_duration_seconds_count{status=~"5.."}[1m]))` devolvía `No data` en Grafana cuando el sistema estaba sano porque la serie con etiqueta `status="500"` no existe hasta que ocurre el primer error. Lo solucioné agregando `or vector(0)` en el numerador para graficar `0%` de forma continua.
@@ -181,9 +181,9 @@ Se midio el tiempo del primer run completo en verde (Antes) frente al pipeline o
   - [Argo CD Documentation - Getting Started & Automated Sync Policy](https://argo-cd.readthedocs.io/en/stable/user-guide/auto_sync/)
   - [OpenGitOps Principles](https://opengitops.dev/)
 - **Cómo lo verifiqué:**
-  - PR de implementación: `[Enlace a tu PR]`
-  - Commit automático del pipeline: `[Enlace al commit hecho por github-actions[bot]]`
-  - Run de despliegue GitOps: `[Enlace a tu Run]`
+  - PR de implementación: [Enlace a PR](https://github.com/JosephMzp/demo-cicd/pull/25)
+  - Commit automático del pipeline: [Commit GitOps en main](https://github.com/JosephMzp/demo-cicd/commit/bd7299a0f26c0c6e3618288f43e8e5980c5c148e)
+  - Run de despliegue GitOps: [Run en GitHub Actions](https://github.com/JosephMzp/demo-cicd/actions/runs/40062342534)
   - Prueba de *Self-Heal*: Se modificó manualmente el número de réplicas de `deploy/api` en `demo-staging` con `kubectl scale deploy/api --replicas=1` y se verificó que Argo CD detectó el estado `OutOfSync` y lo restauró automáticamente a `2` réplicas en segundos.
 - **Qué no me funcionó:** Al intentar que el job `deploy-staging` hiciera `git push origin HEAD:main`, la protección de la rama (`github_repository_ruleset`) bloqueaba el push directo porque exigía Pull Request para todos los actores. Lo solucioné configurando `bypass_actors` en el ruleset (y reflejándolo en `terraform/main.tf` para mantener cero drift) y agregando `[skip ci]` al mensaje del commit para evitar un bucle infinito de ejecuciones.
 
