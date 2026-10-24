@@ -310,3 +310,31 @@ jobs:
           kubectl -n demo-staging rollout status deploy/web --timeout=180s
       - name: Smoke test contra STAGING
         run: bash scripts/smoke.sh http://localhost:30080
+
+  deploy-prod:
+    name: Deploy PROD (Render)
+    needs: deploy-staging
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://demo-cicd-api-sha-gbox.onrender.com
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v4
+
+      - name: Disparar despliegue de API en Render
+        run: |
+          IMAGE_API="ghcr.io/$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')/demo-cicd-api:sha-${{ github.sha }}"
+          curl -X POST "${{ secrets.RENDER_HOOK_API }}&imgURL=$IMAGE_API"
+
+      - name: Disparar despliegue de Web en Render
+        run: |
+          IMAGE_WEB="ghcr.io/$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')/demo-cicd-web:sha-${{ github.sha }}"
+          curl -X POST "${{ secrets.RENDER_HOOK_WEB }}&imgURL=$IMAGE_WEB"
+
+      - name: Esperar inicialización de contenedores en Render
+        run: sleep 90
+
+      - name: Smoke test contra producción
+        run: bash scripts/smoke.sh https://demo-cicd-api-sha-gbox.onrender.com
