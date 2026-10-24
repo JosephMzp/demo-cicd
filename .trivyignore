@@ -7,6 +7,7 @@
 CVE-2025-68121
 CVE-2026-111497
 CVE-2026-111181
+CVE-2026-111943
 # Aceptadas para el LAB-04 (18/10/2026). 
 # Vulnerabilidades HIGH en el binario de Go de 'gosu' incluido en postgres:16-alpine.
 # gosu solo se ejecuta localmente durante un segundo en el entrypoint para bajar privilegios.
