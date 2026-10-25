@@ -318,7 +318,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: production
-      url: https://demo-cicd-api-sha-gbox.onrender.com
+      url: https://demo-cicd-web-sha.onrender.com
     steps:
       - name: Checkout del código
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -337,4 +337,4 @@ jobs:
         run: sleep 90
 
       - name: Smoke test contra producción
-        run: bash scripts/smoke.sh https://demo-cicd-api-sha-gbox.onrender.com
+        run: bash scripts/smoke.sh https://demo-cicd-web-sha.onrender.com
