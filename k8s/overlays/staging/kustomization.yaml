@@ -23,10 +23,10 @@ patches:
 images:
   - name: demo-cicd-web
     newName: ghcr.io/josephmzp/demo-cicd-web
-    newTag: sha-73481ab9307c2be502bd13125fec149c6b2cff45
+    newTag: sha-8c0e210fbe363606cb7125d5d6acdf949008a7f3
   - name: demo-cicd-api
     newName: ghcr.io/josephmzp/demo-cicd-api
-    newTag: sha-73481ab9307c2be502bd13125fec149c6b2cff45
+    newTag: sha-8c0e210fbe363606cb7125d5d6acdf949008a7f3
   - name: demo-cicd-db
     newName: ghcr.io/josephmzp/demo-cicd-db
-    newTag: sha-73481ab9307c2be502bd13125fec149c6b2cff45
+    newTag: sha-8c0e210fbe363606cb7125d5d6acdf949008a7f3
