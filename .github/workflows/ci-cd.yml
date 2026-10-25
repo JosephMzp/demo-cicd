@@ -301,15 +301,21 @@ jobs:
         env:
           COMMIT_SHA: ${{ github.sha }}
         run: |
+          kubectl create namespace demo-staging || true
+          kubectl -n demo-staging create secret generic db-credenciales --from-literal=DB_PASSWORD="staging-seguro" || true
+          
           kubectl apply -f k8s/argocd-staging-app.yaml
-          # Forzar refresh en Argo CD para no esperar los 3 minutos de polling por defecto
           kubectl -n argocd annotate application demo-cicd-staging argocd.argoproj.io/refresh=normal --overwrite
-          sleep 5
+          
+          sleep 25
+          
           kubectl -n demo-staging rollout status deploy/db  --timeout=180s
           kubectl -n demo-staging rollout status deploy/api --timeout=180s
           kubectl -n demo-staging rollout status deploy/web --timeout=180s
       - name: Smoke test contra STAGING
-        run: bash scripts/smoke.sh http://localhost:30080
+        run: |
+          sleep 10
+          bash scripts/smoke.sh http://localhost:30080
 
   deploy-prod:
     name: Deploy PROD (Render)
