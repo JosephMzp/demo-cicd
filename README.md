@@ -187,6 +187,17 @@ Se midio el tiempo del primer run completo en verde (Antes) frente al pipeline o
   - Prueba de *Self-Heal*: Se modificó manualmente el número de réplicas de `deploy/api` en `demo-staging` con `kubectl scale deploy/api --replicas=1` y se verificó que Argo CD detectó el estado `OutOfSync` y lo restauró automáticamente a `2` réplicas en segundos.
 - **Qué no me funcionó:** Al intentar que el job `deploy-staging` hiciera `git push origin HEAD:main`, la protección de la rama (`github_repository_ruleset`) bloqueaba el push directo porque exigía Pull Request para todos los actores. Lo solucioné configurando `bypass_actors` en el ruleset (y reflejándolo en `terraform/main.tf` para mantener cero drift) y agregando `[skip ci]` al mensaje del commit para evitar un bucle infinito de ejecuciones.
 
+### Reto 5: Un ambiente fuera de tu laptop (Render)
+
+- **Decisión:** Desplegar los servicios `api` y `web` hacia internet público utilizando la capa gratuita de Render. Se configuraron como "Web Services" obteniendo las imágenes directamente desde GHCR y se automatizó el despliegue mediante un Deploy Hook (webhook) disparado desde el job `deploy-prod` de GitHub Actions al finalizar STAGING.
+- **Alternativas que evalué:**
+  - *Render vs. Heroku / Fly.io:* Heroku eliminó su capa gratuita, y Fly.io requiere asociar una tarjeta de crédito. Render permite desplegar contenedores Docker públicos de GHCR gratuitamente y ofrece URLs para automatizar los despliegues sin necesidad de instalar un CLI o gestionar tokens complejos en GitHub.
+- **Por qué elegí esta:** Es la solución más directa y gratuita para exponer la aplicación en un entorno productivo real fuera del localhost, validando que las imágenes inmutables construidas en CI funcionan en cualquier infraestructura.
+- **Cómo lo verifiqué:**
+  - El job `deploy-prod` ejecuta el *smoke test* contra la URL pública de la web.
+  - La aplicación está pública y accesible desde cualquier navegador ([Ver URL de Render](https://demo-cicd-web-sha.onrender.com)).
+- **Qué no me funcionó:** Al llevar el contenedor de Nginx a Render, el servicio fallaba constantemente con el error `emerg host not found in upstream "api"` porque la red interna de Kubernetes/Compose no existía allí. Lo solucioné de forma definitiva utilizando plantillas dinámicas en Nginx (`default.conf.template`) y asegurando que las variables de entorno se inyectaran correctamente desde el panel de Render.
+
 ### Reto 6: La plataforma tambien es codigo (Terraform)
 
 - **Decision:** Codificar la configuracion de gobierno del repositorio (`demo-cicd`) usando Terraform y el provider oficial `integrations/github` (`v6.6.0`) en `terraform/main.tf`, incluyendo los environments `dev` y `staging` (con revisores requeridos) y el ruleset de proteccion de la rama `main`.
