@@ -4,29 +4,6 @@ USER root
 RUN apk update && apk upgrade --no-cache
 USER 101
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-]
 ENV API_URL="http://api:3000"
 
 COPY nginx.conf /etc/nginx/templates/default.conf.template
